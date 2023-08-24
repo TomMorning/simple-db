@@ -76,7 +76,8 @@ public class HeapPage implements Page {
      */
     private int getNumTuples() {
         // TODO: some code goes here
-        return 0;
+        int bitsPerTupleIncludingHeader = td.getSize() * 8 + 1; // +1 for header bit
+        return (BufferPool.getPageSize() * 8) / bitsPerTupleIncludingHeader;
 
     }
 
@@ -88,7 +89,7 @@ public class HeapPage implements Page {
     private int getHeaderSize() {
 
         // TODO: some code goes here
-        return 0;
+        return (int) Math.ceil((double) numSlots / 8);
 
     }
 
@@ -122,7 +123,7 @@ public class HeapPage implements Page {
      */
     public HeapPageId getId() {
         // TODO: some code goes here
-        throw new UnsupportedOperationException("implement this");
+        return pid;
     }
 
     /**
@@ -294,7 +295,13 @@ public class HeapPage implements Page {
      */
     public int getNumUnusedSlots() {
         // TODO: some code goes here
-        return 0;
+        int count = 0;
+        for (int i = 0; i < numSlots; i++) {
+            if (!isSlotUsed(i)) {
+                count++;
+            }
+        }
+        return count;
     }
 
     /**
@@ -302,7 +309,12 @@ public class HeapPage implements Page {
      */
     public boolean isSlotUsed(int i) {
         // TODO: some code goes here
-        return false;
+        if (i < 0 || i >= numSlots) {
+            return false;
+        }
+        int byteIndex = i / 8;
+        int bitIndex = i % 8;
+        return (header[byteIndex] & (1 << bitIndex)) != 0;
     }
 
     /**
@@ -311,6 +323,13 @@ public class HeapPage implements Page {
     private void markSlotUsed(int i, boolean value) {
         // TODO: some code goes here
         // not necessary for lab1
+        int byteIndex = i / 8;
+        int bitIndex = i % 8;
+        if (value) {
+            header[byteIndex] |= (1 << bitIndex);
+        } else {
+            header[byteIndex] &= ~(1 << bitIndex);
+        }
     }
 
     /**
@@ -319,7 +338,25 @@ public class HeapPage implements Page {
      */
     public Iterator<Tuple> iterator() {
         // TODO: some code goes here
-        return null;
+        return new Iterator<Tuple>() {
+            private int currentIndex = 0;
+
+            @Override
+            public boolean hasNext() {
+                while (currentIndex < tuples.length && (tuples[currentIndex] == null || !isSlotUsed(currentIndex))) {
+                    currentIndex++;
+                }
+                return currentIndex < tuples.length;
+            }
+
+            @Override
+            public Tuple next() {
+                if (!hasNext()) {
+                    throw new NoSuchElementException();
+                }
+                return tuples[currentIndex++];
+            }
+        };
     }
 
 }

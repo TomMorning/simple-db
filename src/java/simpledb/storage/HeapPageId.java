@@ -6,6 +6,8 @@ import java.util.Objects;
  * Unique identifier for HeapPage objects.
  */
 public class HeapPageId implements PageId {
+    private final int tableId;  // 表的唯一标识
+    private final int pgNo;     // 表中的页面编号
 
     /**
      * Constructor. Create a page id structure for a specific page of a
@@ -16,6 +18,8 @@ public class HeapPageId implements PageId {
      */
     public HeapPageId(int tableId, int pgNo) {
         // TODO: some code goes here
+        this.tableId = tableId;
+        this.pgNo = pgNo;
     }
 
     /**
@@ -23,7 +27,7 @@ public class HeapPageId implements PageId {
      */
     public int getTableId() {
         // TODO: some code goes here
-        return 0;
+        return tableId;
     }
 
     /**
@@ -32,7 +36,7 @@ public class HeapPageId implements PageId {
      */
     public int getPageNumber() {
         // TODO: some code goes here
-        return 0;
+        return pgNo;
     }
 
     /**
@@ -43,7 +47,7 @@ public class HeapPageId implements PageId {
      */
     public int hashCode() {
         // TODO: some code goes here
-        throw new UnsupportedOperationException("implement this");
+        return Objects.hash(tableId, pgNo);
     }
 
     /**
@@ -55,7 +59,14 @@ public class HeapPageId implements PageId {
      */
     public boolean equals(Object o) {
         // TODO: some code goes here
-        return false;
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        HeapPageId that = (HeapPageId) o;
+        return tableId == that.tableId && pgNo == that.pgNo;
     }
 
     /**

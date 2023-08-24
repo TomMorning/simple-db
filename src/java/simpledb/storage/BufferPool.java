@@ -11,6 +11,8 @@ import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * BufferPool manages the reading and writing of pages into memory from
@@ -30,6 +32,9 @@ public class BufferPool {
     private static final int DEFAULT_PAGE_SIZE = 4096;
 
     private static int pageSize = DEFAULT_PAGE_SIZE;
+    private final LinkedHashMap<PageId, Page> pageMap;
+    private final ReadWriteLock lock = new ReentrantReadWriteLock();
+    private final int maxPages;
 
     /**
      * Default number of pages passed to the constructor. This is used by
@@ -45,6 +50,8 @@ public class BufferPool {
      */
     public BufferPool(int numPages) {
         // TODO: some code goes here
+        pageMap = new LinkedHashMap<>();
+        maxPages = numPages;
     }
 
     public static int getPageSize() {
@@ -79,7 +86,32 @@ public class BufferPool {
     public Page getPage(TransactionId tid, PageId pid, Permissions perm)
             throws TransactionAbortedException, DbException {
         // TODO: some code goes here
-        return null;
+        lock.readLock().lock();
+        try {
+            Page cachedPage = pageMap.get(pid);
+            if (cachedPage != null) {
+                return cachedPage;
+            }
+        } finally {
+            lock.readLock().unlock();
+        }
+        lock.writeLock().lock();
+        try {
+            // double check in case another thread loaded the page right before this thread got the write lock
+            Page cachedPage = pageMap.get(pid);
+            if (cachedPage != null) {
+                return cachedPage;
+            }
+            if (pageMap.size() >= maxPages) {
+                evictPage();
+            }
+            DbFile dbFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
+            Page page = dbFile.readPage(pid);
+            pageMap.put(pid, page);
+            return page;
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     /**
