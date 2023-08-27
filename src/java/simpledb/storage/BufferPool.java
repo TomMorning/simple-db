@@ -178,6 +178,26 @@ public class BufferPool {
             throws DbException, IOException, TransactionAbortedException {
         // TODO: some code goes here
         // not necessary for lab1
+        DbFile dbFile = Database.getCatalog().getDatabaseFile(tableId);
+        List<Page> dirtiedPages = dbFile.insertTuple(tid, t);
+
+        lock.writeLock().lock();
+        try {
+            for (Page page : dirtiedPages) {
+                page.markDirty(true, tid);
+                // Update the page in the buffer pool
+                if (pageMap.containsKey(page.getId())) {
+                    pageMap.put(page.getId(), page);
+                } else {
+                    if (pageMap.size() >= maxPages) {
+                        evictPage();
+                    }
+                    pageMap.put(page.getId(), page);
+                }
+            }
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     /**
@@ -197,6 +217,27 @@ public class BufferPool {
             throws DbException, IOException, TransactionAbortedException {
         // TODO: some code goes here
         // not necessary for lab1
+        int tableId = t.getRecordId().getPageId().getTableId();
+        DbFile dbFile = Database.getCatalog().getDatabaseFile(tableId);
+        List<Page> dirtiedPages = dbFile.deleteTuple(tid, t);
+
+        lock.writeLock().lock();
+        try {
+            for (Page page : dirtiedPages) {
+                page.markDirty(true, tid);
+                // Update the page in the buffer pool
+                if (pageMap.containsKey(page.getId())) {
+                    pageMap.put(page.getId(), page);
+                } else {
+                    if (pageMap.size() >= maxPages) {
+                        evictPage();
+                    }
+                    pageMap.put(page.getId(), page);
+                }
+            }
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     /**
@@ -207,7 +248,18 @@ public class BufferPool {
     public synchronized void flushAllPages() throws IOException {
         // TODO: some code goes here
         // not necessary for lab1
-
+        lock.writeLock().lock();
+        try {
+            for (Map.Entry<PageId, Page> entry : pageMap.entrySet()) {
+                PageId pid = entry.getKey();
+                Page page = entry.getValue();
+                if (page.isDirty() != null) {
+                    flushPage(pid);
+                }
+            }
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     /**
@@ -222,6 +274,12 @@ public class BufferPool {
     public synchronized void removePage(PageId pid) {
         // TODO: some code goes here
         // not necessary for lab1
+        lock.writeLock().lock();
+        try {
+            pageMap.remove(pid);
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     /**
@@ -232,6 +290,18 @@ public class BufferPool {
     private synchronized void flushPage(PageId pid) throws IOException {
         // TODO: some code goes here
         // not necessary for lab1
+        lock.writeLock().lock();
+        try {
+            Page page = pageMap.get(pid);
+            TransactionId dirtyingId = page.isDirty();
+            if (dirtyingId != null) {
+                DbFile dbFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
+                dbFile.writePage(page);
+                page.markDirty(false, null);
+            }
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     /**
@@ -249,6 +319,25 @@ public class BufferPool {
     private synchronized void evictPage() throws DbException {
         // TODO: some code goes here
         // not necessary for lab1
+        lock.writeLock().lock();
+        try {
+            PageId evictCandidate = null;
+            for (PageId pid : pageMap.keySet()) {
+                evictCandidate = pid;
+                break; // Just taking the first one for now. You may implement LRU or another strategy.
+            }
+
+            if (evictCandidate == null) {
+                throw new DbException("No page to evict!");
+            }
+
+            flushPage(evictCandidate); // Flush to disk before eviction
+            pageMap.remove(evictCandidate);
+        } catch (IOException e) {
+            throw new RuntimeException("I/O exception when evicting page");
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
 }

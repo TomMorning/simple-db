@@ -29,6 +29,13 @@ public class HeapPage implements Page {
     private final Byte oldDataLock = (byte) 0;
 
     /**
+     * Marks this page as dirty/not dirty and record that transaction
+     * that did the dirtying
+     */
+    private boolean dirty = false;
+    private TransactionId lastDirtyTid = null;
+
+    /**
      * Create a HeapPage from a set of bytes of data read from disk.
      * The format of a HeapPage is a set of header bytes indicating
      * the slots of the page that are in use, some number of tuple slots.
@@ -257,6 +264,16 @@ public class HeapPage implements Page {
     public void deleteTuple(Tuple t) throws DbException {
         // TODO: some code goes here
         // not necessary for lab1
+        RecordId rid = t.getRecordId();
+        if (rid == null || !rid.getPageId().equals(pid)) {
+            throw new DbException("Tuple is not on this page");
+        }
+        int tupleNo = rid.getTupleNumber();
+        if (!isSlotUsed(tupleNo)) {
+            throw new DbException("Tuple slot is already empty");
+        }
+        markSlotUsed(tupleNo, false);
+        tuples[tupleNo] = null;
     }
 
     /**
@@ -270,6 +287,20 @@ public class HeapPage implements Page {
     public void insertTuple(Tuple t) throws DbException {
         // TODO: some code goes here
         // not necessary for lab1
+        if (getNumUnusedSlots() == 0) {
+            throw new DbException("No empty slot");
+        }
+        if (!t.getTupleDesc().equals(td)) {
+            throw new DbException("TupleDesc mismatch");
+        }
+        for (int i = 0; i < numSlots; i++) {
+            if (!isSlotUsed(i)) {
+                tuples[i] = t;
+                markSlotUsed(i, true);
+                t.setRecordId(new RecordId(pid, i));
+                return;
+            }
+        }
     }
 
     /**
@@ -279,6 +310,8 @@ public class HeapPage implements Page {
     public void markDirty(boolean dirty, TransactionId tid) {
         // TODO: some code goes here
         // not necessary for lab1
+        this.dirty = dirty;
+        this.lastDirtyTid = dirty ? tid : null;
     }
 
     /**
@@ -287,7 +320,7 @@ public class HeapPage implements Page {
     public TransactionId isDirty() {
         // TODO: some code goes here
         // Not necessary for lab1
-        return null;      
+        return dirty ? lastDirtyTid : null;
     }
 
     /**

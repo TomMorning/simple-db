@@ -389,7 +389,7 @@ package simpledb;
 
 import java.io.*;
 
-public class jointest {
+public class simpledb.jointest {
 
     public static void main(String[] argv) {
         // construct a 3-column table schema

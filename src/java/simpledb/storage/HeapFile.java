@@ -110,16 +110,38 @@ public class HeapFile implements DbFile {
     public List<Page> insertTuple(TransactionId tid, Tuple t)
             throws DbException, IOException, TransactionAbortedException {
         // TODO: some code goes here
-        return null;
         // not necessary for lab1
+        // Check if there is any existing page with free slots
+        List<Page> affectedPages = new ArrayList<>();
+        for (int i = 0; i < numPages(); i++) {
+            HeapPageId pid = new HeapPageId(getId(), i);
+            HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, pid, Permissions.READ_WRITE);
+            if (page.getNumUnusedSlots() > 0) {
+                page.insertTuple(t);
+                affectedPages.add(page);
+                return affectedPages;
+            }
+        }
+
+        // No existing page with free slots, create a new page
+        HeapPageId pid = new HeapPageId(getId(), numPages());
+        HeapPage newPage = new HeapPage(pid, HeapPage.createEmptyPageData());
+        newPage.insertTuple(t);
+        writePage(newPage);
+        affectedPages.add(newPage);
+        return affectedPages;
     }
 
     // see DbFile.java for javadocs
     public List<Page> deleteTuple(TransactionId tid, Tuple t) throws DbException,
             TransactionAbortedException {
         // TODO: some code goes here
-        return null;
         // not necessary for lab1
+        List<Page> affectedPages = new ArrayList<>();
+        HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, t.getRecordId().getPageId(), Permissions.READ_WRITE);
+        page.deleteTuple(t);
+        affectedPages.add(page);
+        return affectedPages;
     }
 
     // see DbFile.java for javadocs

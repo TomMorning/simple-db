@@ -11,6 +11,9 @@ import java.io.Serializable;
 public class Predicate implements Serializable {
 
     private static final long serialVersionUID = 1L;
+    private int field;
+    private Op op;
+    private Field operand;
 
     /**
      * Constants used for return codes in Field.compare
@@ -57,6 +60,9 @@ public class Predicate implements Serializable {
      */
     public Predicate(int field, Op op, Field operand) {
         // TODO: some code goes here
+        this.field = field;
+        this.op = op;
+        this.operand = operand;
     }
 
     /**
@@ -64,7 +70,7 @@ public class Predicate implements Serializable {
      */
     public int getField() {
         // TODO: some code goes here
-        return -1;
+        return field;
     }
 
     /**
@@ -72,7 +78,7 @@ public class Predicate implements Serializable {
      */
     public Op getOp() {
         // TODO: some code goes here
-        return null;
+        return op;
     }
 
     /**
@@ -80,7 +86,7 @@ public class Predicate implements Serializable {
      */
     public Field getOperand() {
         // TODO: some code goes here
-        return null;
+        return operand;
     }
 
     /**
@@ -94,7 +100,28 @@ public class Predicate implements Serializable {
      */
     public boolean filter(Tuple t) {
         // TODO: some code goes here
-        return false;
+        if (t == null) {
+            return false;
+        }
+        Field tupleField = t.getField(field);
+        switch (op) {
+            case EQUALS:
+                return tupleField.compare(Op.EQUALS, operand);
+            case GREATER_THAN:
+                return tupleField.compare(Op.GREATER_THAN, operand);
+            case LESS_THAN:
+                return tupleField.compare(Op.LESS_THAN, operand);
+            case LESS_THAN_OR_EQ:
+                return tupleField.compare(Op.LESS_THAN_OR_EQ, operand);
+            case GREATER_THAN_OR_EQ:
+                return tupleField.compare(Op.GREATER_THAN_OR_EQ, operand);
+            case LIKE:
+                return tupleField.compare(Op.LIKE, operand);
+            case NOT_EQUALS:
+                return tupleField.compare(Op.NOT_EQUALS, operand);
+            default:
+                return false;
+        }
     }
 
     /**
@@ -103,6 +130,6 @@ public class Predicate implements Serializable {
      */
     public String toString() {
         // TODO: some code goes here
-        return "";
+        return "f = " + field + " op = " + op.toString() + " operand = " + operand.toString();
     }
 }
