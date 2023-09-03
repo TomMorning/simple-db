@@ -18,6 +18,7 @@ import java.util.*;
 public class JoinOptimizer {
     final LogicalPlan p;
     final List<LogicalJoinNode> joins;
+    private PlanCache planCache;
 
     /**
      * Constructor
@@ -28,6 +29,7 @@ public class JoinOptimizer {
     public JoinOptimizer(LogicalPlan p, List<LogicalJoinNode> joins) {
         this.p = p;
         this.joins = joins;
+        this.planCache = new PlanCache();
     }
 
     /**
@@ -105,7 +107,20 @@ public class JoinOptimizer {
             // HINT: You may need to use the variable "j" if you implemented
             // a join algorithm that's more complicated than a basic
             // nested-loops join.
-            return -1.0;
+
+            // In a nested loop join, for each tuple in the outer relation,
+            // we scan the entire inner relation.
+            // So, the cost would be the sum of:
+            // - Scanning the outer relation once (cost1)
+            // - For each tuple in the outer relation (card1), scanning the inner relation (cost2)
+            double nestedLoopJoinCost = cost1 + card1 * cost2;
+
+            // Assuming the cost of applying the join predicate is roughly 1 per tuple pair,
+            // the total cost would also involve these comparisons.
+            // This would happen card1 * card2 times.
+            nestedLoopJoinCost += card1 * card2;
+
+            return nestedLoopJoinCost;
         }
     }
 
@@ -145,6 +160,29 @@ public class JoinOptimizer {
                                                    Map<String, Integer> tableAliasToId) {
         int card = 1;
         // TODO: some code goes here
+        // Case 1: If it's an equi-join and one of the fields is a primary key
+        if (joinOp == Predicate.Op.EQUALS) {
+            if (t1pkey && !t2pkey) {
+                // Field1 is a primary key, Field2 is not
+                card = card2;
+            } else if (!t1pkey && t2pkey) {
+                // Field2 is a primary key, Field1 is not
+                card = card1;
+            } else if (t1pkey && t2pkey) {
+                // Both fields are primary keys
+                card = Math.min(card1, card2);
+            } else {
+                // Neither field is a primary key
+                card = card1 * card2;
+            }
+        }
+
+        // Case 2: Non-equi joins like LESS_THAN, GREATER_THAN
+        else {
+            // In general, these are hard to estimate without histograms or other statistics.
+            // Here we make a very simplistic assumption.
+            card = (int)(0.1 * card1 * card2);
+        }
         return card <= 0 ? 1 : card;
     }
 
@@ -201,7 +239,40 @@ public class JoinOptimizer {
         // Not necessary for labs 1 and 2.
 
         // TODO: some code goes here
-        return joins;
+        // Initialize the PlanCache
+        List<LogicalJoinNode> bestOrder = null;
+        double bestCost = Double.MAX_VALUE;
+
+        // Enumerate all subsets of joins
+        for (int i = 1; i <= joins.size(); i++) {
+            for (Set<LogicalJoinNode> subset : enumerateSubsets(joins, i)) {
+                double cost, card;
+                List<LogicalJoinNode> order;
+
+                // Compute the cost and cardinality of each subset by removing one join at a time
+                for (LogicalJoinNode joinToRemove : subset) {
+                    Set<LogicalJoinNode> reducedSet = new HashSet<>(subset);
+                    reducedSet.remove(joinToRemove);
+
+                    // Call computeCostAndCardOfSubplan method to calculate cost and cardinality
+                    CostCard costCard = computeCostAndCardOfSubplan(stats, filterSelectivities, joinToRemove, reducedSet, bestCost, planCache);
+
+                    // Update the best plan if this one is better
+                    if (costCard.cost < bestCost) {
+                        bestCost = costCard.cost;
+                        bestOrder = new ArrayList<>(planCache.getOrder(subset));
+                    }
+                }
+            }
+        }
+
+        if (explain) {
+            // Output the best join order for informational purposes
+            System.out.println("Best join order is: " + bestOrder);
+            System.out.println("Best cost is: " + bestCost);
+        }
+
+        return bestOrder;
     }
 
     // ===================== Private Methods =================================
