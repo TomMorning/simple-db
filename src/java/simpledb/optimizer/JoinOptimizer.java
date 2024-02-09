@@ -239,40 +239,50 @@ public class JoinOptimizer {
         // Not necessary for labs 1 and 2.
 
         // TODO: some code goes here
-        // Initialize the PlanCache
-        List<LogicalJoinNode> bestOrder = null;
-        double bestCost = Double.MAX_VALUE;
+        // Initialize the PlanCache to store optimal join orders for subsets
+        PlanCache pc = new PlanCache();
 
-        // Enumerate all subsets of joins
+        // Store the best cost for each subset of joins
+        Map<Set<LogicalJoinNode>, Double> bestCosts = new HashMap<>();
+
+        // Initialize the final join order list
+        List<LogicalJoinNode> finalJoinOrder = new ArrayList<>();
+
+        // Start with single-node subsets and expand
         for (int i = 1; i <= joins.size(); i++) {
             for (Set<LogicalJoinNode> subset : enumerateSubsets(joins, i)) {
-                double cost, card;
-                List<LogicalJoinNode> order;
+                double bestSubsetCost = Double.MAX_VALUE;
+                List<LogicalJoinNode> bestSubsetOrder = null;
 
-                // Compute the cost and cardinality of each subset by removing one join at a time
-                for (LogicalJoinNode joinToRemove : subset) {
-                    Set<LogicalJoinNode> reducedSet = new HashSet<>(subset);
-                    reducedSet.remove(joinToRemove);
+                // Iterate through each node in the subset to find the best plan
+                for (LogicalJoinNode toRemove : subset) {
+                    Set<LogicalJoinNode> subSubset = new HashSet<>(subset);
+                    subSubset.remove(toRemove);
 
-                    // Call computeCostAndCardOfSubplan method to calculate cost and cardinality
-                    CostCard costCard = computeCostAndCardOfSubplan(stats, filterSelectivities, joinToRemove, reducedSet, bestCost, planCache);
-
-                    // Update the best plan if this one is better
-                    if (costCard.cost < bestCost) {
-                        bestCost = costCard.cost;
-                        bestOrder = new ArrayList<>(planCache.getOrder(subset));
+                    CostCard costCard = computeCostAndCardOfSubplan(stats, filterSelectivities, toRemove, subSubset, bestSubsetCost, pc);
+                    if (costCard != null && costCard.cost < bestSubsetCost) {
+                        bestSubsetCost = costCard.cost;
+                        bestSubsetOrder = costCard.plan;
                     }
+                }
+
+                // Update the PlanCache and bestCosts map
+                if (bestSubsetOrder != null) {
+                    pc.addPlan(subset, bestSubsetCost, bestSubsetOrder.size(), bestSubsetOrder);
+                    bestCosts.put(subset, bestSubsetCost);
                 }
             }
         }
+        // Retrieve the optimal join order for the full set of joins
+        finalJoinOrder = pc.getOrder(new HashSet<>(joins));
 
+
+        // If explain is true, print the join plan
         if (explain) {
-            // Output the best join order for informational purposes
-            System.out.println("Best join order is: " + bestOrder);
-            System.out.println("Best cost is: " + bestCost);
+            printJoins(finalJoinOrder, pc, stats, filterSelectivities);
         }
 
-        return bestOrder;
+        return finalJoinOrder;
     }
 
     // ===================== Private Methods =================================
