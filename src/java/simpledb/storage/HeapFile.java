@@ -119,9 +119,11 @@ public class HeapFile implements DbFile {
             if (page.getNumUnusedSlots() > 0) {
                 page.insertTuple(t);
                 affectedPages.add(page);
+                Database.getBufferPool().unsafeReleasePage(tid, pid);
                 return affectedPages;
             }
-        }
+            Database.getBufferPool().unsafeReleasePage(tid, pid);
+        };
 
         // No existing page with free slots, create a new page
         HeapPageId pid = new HeapPageId(getId(), numPages());

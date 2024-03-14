@@ -35,6 +35,7 @@ public class BufferPool {
     private final LinkedHashMap<PageId, Page> pageMap;
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
     private final int maxPages;
+    private final LockManager lockManager = new LockManager();
 
     /**
      * Default number of pages passed to the constructor. This is used by
@@ -85,34 +86,34 @@ public class BufferPool {
      */
     public Page getPage(TransactionId tid, PageId pid, Permissions perm)
             throws TransactionAbortedException, DbException {
-        // TODO: some code goes here
-        lock.readLock().lock();
-        try {
-            Page cachedPage = pageMap.get(pid);
-            if (cachedPage != null) {
-                return cachedPage;
-            }
-        } finally {
-            lock.readLock().unlock();
+        if (pageMap.containsKey(pid) && lockManager.holdsLock(tid, pid) && pageMap.get(pid).isDirty() == null) {
+            lockManager.releaseLock(tid, pid);
         }
-        lock.writeLock().lock();
+        boolean lockAcquired = lockManager.acquireLock(tid, pid, perm);
+        if (!lockAcquired) {
+            throw new TransactionAbortedException();
+        }
+
         try {
-            // double check in case another thread loaded the page right before this thread got the write lock
             Page cachedPage = pageMap.get(pid);
             if (cachedPage != null) {
                 return cachedPage;
             }
+
             if (pageMap.size() >= maxPages) {
                 evictPage();
             }
+
             DbFile dbFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
             Page page = dbFile.readPage(pid);
             pageMap.put(pid, page);
             return page;
         } finally {
-            lock.writeLock().unlock();
+            // Do not release lock here; it should be held until transaction completion
         }
     }
+
+
 
     /**
      * Releases the lock on a page.
@@ -126,6 +127,7 @@ public class BufferPool {
     public void unsafeReleasePage(TransactionId tid, PageId pid) {
         // TODO: some code goes here
         // not necessary for lab1|lab2
+        lockManager.releaseLock(tid, pid);
     }
 
     /**
@@ -141,10 +143,10 @@ public class BufferPool {
     /**
      * Return true if the specified transaction has a lock on the specified page
      */
-    public boolean holdsLock(TransactionId tid, PageId p) {
+    public boolean holdsLock(TransactionId tid, PageId pid) {
         // TODO: some code goes here
         // not necessary for lab1|lab2
-        return false;
+        return lockManager.holdsLock(tid, pid);
     }
 
     /**
@@ -157,6 +159,20 @@ public class BufferPool {
     public void transactionComplete(TransactionId tid, boolean commit) {
         // TODO: some code goes here
         // not necessary for lab1|lab2
+        if (commit) {
+            // 提交事务：将所有脏页刷新到磁盘
+            try {
+                flushPages(tid);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        } else {
+            // 中止事务：回滚所有更改
+//            rollback(tid);
+        }
+//
+//        // 释放该事务持有的所有锁
+        lockManager.releaseAllLocks(tid);
     }
 
     /**
@@ -310,6 +326,14 @@ public class BufferPool {
     public synchronized void flushPages(TransactionId tid) throws IOException {
         // TODO: some code goes here
         // not necessary for lab1|lab2
+        for (PageId pid : pageMap.keySet()) {
+            Page page = pageMap.get(pid);
+            // 检查页面是否为脏且由指定的事务修改
+            if (page.isDirty() != null && page.isDirty().equals(tid)) {
+                flushPage(pid);  // 利用已实现的 flushPage 方法写入页面
+                page.markDirty(false, null);  // 清除脏标记
+            }
+        }
     }
 
     /**
